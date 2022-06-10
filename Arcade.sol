@@ -15,9 +15,10 @@ contract Arcade is Ownable {
     uint256 costOfPlaying = 1e16; //1e16 = 0.01 eth
     address payoutWallet = 0xdD870fA1b7C4700F2BD7f44238821C26f7392148;
 
-    mapping (address => uint) public arcadeTokensAvailable;
-    mapping (uint => GameResult[]) public leaderboard;
-    mapping (uint => bool) public dayHasBeenPaidOut;   
+    mapping (address => uint256) public arcadeTokensAvailable;
+    mapping (uint256 => GameResult[]) public leaderboard;
+    mapping (uint256 => bool) public dayHasBeenPaidOut; 
+    mapping (uint256 => uint256) public dailyPoolValue; // day => day's pool's value
 
     //uint256 public contractBalance  = address(this).balance;
     //uint256 public myBalance = 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4.balance;
@@ -36,6 +37,7 @@ contract Arcade is Ownable {
         require(arcadeTokensAvailable[msg.sender] > 0, "Sorry, you need to pay to play!");
         leaderboard[block.timestamp/nowToDay].push(GameResult(_game,_address,block.timestamp/nowToDay,_score));
         arcadeTokensAvailable[msg.sender]--;
+        dailyPoolValue[block.timestamp/nowToDay]++;
     }
 
     function getDay() public view returns (uint256) {
