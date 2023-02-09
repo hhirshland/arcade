@@ -3,24 +3,43 @@ pragma solidity ^0.8.7;
 
 import "./Ownable.sol";
 
-//this contract should be named leaderboard, not arcade, probably.
 contract Arcade is Ownable {
-    string leaderboardName;
+    string public leaderboardName;
+    string public leaderboardGame;
+    bool public hasWhitelist;
+    uint256 public costOfPlaying; // = 1e15; //1e15 = 0.001 eth
+    address public protocolPayoutWallet; // = 0x3f2ff81DA0B5E957ba78A0C4Ad3272cB7d214e71; //this is my arcade payout wallet on metamask (update this!)
+    address public gameDevPayoutWallet; //= 0x3f2ff81DA0B5E957ba78A0C4Ad3272cB7d214e71; //this is my arcade payout wallet on metamask (update this to be the game developer!)
+
     uint256 nowToDay = 86400;
-    uint256 firstPlaceCut = 50;
-    uint256 secondPlaceCut = 25;
-    uint256 thirdPlaceCut = 10;
-    uint256 gameDevTakeRate = (100 - firstPlaceCut - thirdPlaceCut) / 2;
-    uint256 protocolTakeRate = (100 - firstPlaceCut - thirdPlaceCut) / 2;
-    uint256 costOfPlaying = 1e15; //1e15 = 0.001 eth
-    address protocolPayoutWallet = 0x3f2ff81DA0B5E957ba78A0C4Ad3272cB7d214e71; //this is my arcade payout wallet on metamask
-    address gameDevPayoutWallet = 0x3f2ff81DA0B5E957ba78A0C4Ad3272cB7d214e71; //this is my arcade payout wallet on metamask
-    bool hasWhitelist = false;
+    uint256 public firstPlaceCut = 50;
+    uint256 public secondPlaceCut = 25;
+    uint256 public thirdPlaceCut = 10;
+    uint256 gameDevTakeRate = 5;
+    uint256 protocolTakeRate = 10;
+
+    constructor(
+        string memory _leaderboardName,
+        string memory _leaderboardGame,
+        bool _hasWhiteList,
+        uint256 _costOfPlaying,
+        address _protocolPayoutWallet,
+        address _gameDevPayoutWallet,
+        address _owner
+    ) {
+        leaderboardName = _leaderboardName;
+        leaderboardGame = _leaderboardGame;
+        hasWhitelist = _hasWhiteList;
+        costOfPlaying = _costOfPlaying;
+        protocolPayoutWallet = _protocolPayoutWallet;
+        gameDevPayoutWallet = _gameDevPayoutWallet;
+        ownerList[_owner] = true;
+    }
 
     mapping(address => uint256) public arcadeTokensAvailable;
-    mapping(address => bool) whitelistedAddresses;
-    mapping(address => bool) gameSubmittooorList;
-
+    mapping(address => bool) public whitelistedAddresses;
+    mapping(address => bool) public gameSubmittooorList;
+    mapping(address => bool) public ownerList;
     mapping(uint256 => GameResult[]) public leaderboard;
     mapping(uint256 => bool) public dayHasBeenPaidOutList;
 
@@ -37,7 +56,7 @@ contract Arcade is Ownable {
         uint256 _dayPlayed,
         uint256 _score
     );
-    event arcadeTokenBought(address _address);
+    event arcadeTokensBought(address _address, uint256 _numTokens);
     event addressAddedToWhitelist(address _address);
     event addressRemovedFromWhitelist(address _address);
     event dayHasBeenPaidOutEvent(uint256 _day);
@@ -47,7 +66,7 @@ contract Arcade is Ownable {
         string memory _game,
         address _userAddress,
         uint256 _score
-    ) public isWhitelisted(_userAddress) {
+    ) public isWhitelisted(_userAddress) isGameSubmittooor(msg.sender) {
         require(
             arcadeTokensAvailable[_userAddress] > 0,
             "Sorry, you need to pay to play!"
@@ -70,10 +89,12 @@ contract Arcade is Ownable {
     }
 
     //User deposits the game's cost to play, and then is able to play one game
-    function buyArcadeToken() public payable isWhitelisted(msg.sender) {
-        require(msg.value == costOfPlaying);
-        arcadeTokensAvailable[msg.sender]++;
-        emit arcadeTokenBought(msg.sender);
+    function buyArcadeTokens(
+        uint256 _numTokens
+    ) public payable isWhitelisted(msg.sender) {
+        require(msg.value == costOfPlaying * _numTokens);
+        arcadeTokensAvailable[msg.sender] += _numTokens;
+        emit arcadeTokensBought(msg.sender, _numTokens);
     }
 
     //I think I can get rid of this
@@ -82,7 +103,7 @@ contract Arcade is Ownable {
     }
 
     //Updates the cost of playing
-    function updateCostOfPlaying(uint256 _newCost) public onlyOwner {
+    function updateCostOfPlaying(uint256 _newCost) public isOwner(msg.sender) {
         costOfPlaying = _newCost;
     }
 
@@ -152,12 +173,16 @@ contract Arcade is Ownable {
     }
 
     //Function to update the wallet where payout is sent.  Can only be called by contract owner.
-    function updateProtocolPayoutWallet(address _newAddress) public onlyOwner {
+    function updateProtocolPayoutWallet(
+        address _newAddress
+    ) public isOwner(msg.sender) {
         protocolPayoutWallet = _newAddress;
     }
 
     //Function to update the wallet where payout is sent.  Can only be called by contract owner.
-    function updateGameDevPayoutWallet(address _newAddress) public onlyOwner {
+    function updateGameDevPayoutWallet(
+        address _newAddress
+    ) public isOwner(msg.sender) {
         gameDevPayoutWallet = _newAddress;
     }
 
@@ -172,7 +197,7 @@ contract Arcade is Ownable {
         uint256 _thirdPlacePayout,
         uint256 _gameDevPayout,
         uint256 _protocolPayout
-    ) public onlyOwner {
+    ) public isOwner(msg.sender) {
         require(
             _firstPlacePayout +
                 _secondPlacePayout +
@@ -189,20 +214,22 @@ contract Arcade is Ownable {
         protocolTakeRate = _protocolPayout;
     }
 
-    function turnOnWhitelist() public onlyOwner {
+    function turnOnWhitelist() public isOwner(msg.sender) {
         hasWhitelist = true;
     }
 
-    function turnOffWhitelist() public onlyOwner {
+    function turnOffWhitelist() public isOwner(msg.sender) {
         hasWhitelist = false;
     }
 
-    function addUserToWhitelist(address _address) public onlyOwner {
+    function addUserToWhitelist(address _address) public isOwner(msg.sender) {
         whitelistedAddresses[_address] = true;
         emit addressAddedToWhitelist(_address);
     }
 
-    function removeUserFromWhitelist(address _address) public onlyOwner {
+    function removeUserFromWhitelist(
+        address _address
+    ) public isOwner(msg.sender) {
         whitelistedAddresses[_address] = false;
         emit addressRemovedFromWhitelist(_address);
     }
@@ -217,16 +244,30 @@ contract Arcade is Ownable {
         _;
     }
 
-    function addGameSubmittooorAddress(address _address) public onlyOwner {
+    function userIsWhiteListed(address _address) public view returns (bool) {
+        return whitelistedAddresses[_address];
+    }
+
+    function addGameSubmittooorAddress(
+        address _address
+    ) public isOwner(msg.sender) {
         gameSubmittooorList[_address] = true;
     }
 
-    function removeGameSubmittooorAddress(address _address) public onlyOwner {
+    function removeGameSubmittooorAddress(
+        address _address
+    ) public isOwner(msg.sender) {
         gameSubmittooorList[_address] = false;
     }
 
-    function changeLeaderboardName(string memory _name) public {
+    function changeLeaderboardName(
+        string memory _name
+    ) public isOwner(msg.sender) {
         leaderboardName = _name;
+    }
+
+    function getLeaderboardName() public view returns (string memory) {
+        return leaderboardName;
     }
 
     modifier isGameSubmittooor(address _address) {
@@ -235,5 +276,21 @@ contract Arcade is Ownable {
             "Sorry, you can't submit game results"
         );
         _;
+    }
+
+    modifier isOwner(address _address) {
+        require(
+            ownerList[_address],
+            "Sorry, you are not an owner and do not have the required permissions."
+        );
+        _;
+    }
+
+    function addOwner(address _address) public isOwner(msg.sender) {
+        ownerList[_address] = true;
+    }
+
+    function removeOwner(address _address) public isOwner(msg.sender) {
+        ownerList[_address] = false;
     }
 }
